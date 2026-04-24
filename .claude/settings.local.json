@@ -11,7 +11,11 @@
       "Bash(git --version)",
       "Bash(git config *)",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(D:/UGP_amarb/codebase/legacy/InfraSight/venv/Scripts/python.exe -u scripts/smoke_test_phase3.py)",
+      "Bash(echo \"started pid=$!\")",
+      "PowerShell(Stop-Process *)"
     ]
   }
 }
