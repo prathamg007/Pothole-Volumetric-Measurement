@@ -92,6 +92,13 @@ def main() -> int:
         f"cost Rs {s['total_cost']:.0f}"
     )
     print(f"      cracks: {report['cracks']}")
+    rs = report.get("road_surface")
+    if rs:
+        print(
+            f"      road: {rs.get('material')} ({rs.get('material_confidence')}) "
+            f"+ {rs.get('unevenness')} ({rs.get('unevenness_confidence')}) "
+            f"over {rs.get('frames_used')} frames"
+        )
 
     print("[5/5] Downloading annotated video...")
     r = requests.get(f"{SERVER}/jobs/{job_id}/video", timeout=30)

@@ -26,8 +26,10 @@ models:
 
   material_classifier:
     weights: weights/material_classifier.pt
-    conf_threshold: 0.50
-    classes: [asphalt, concrete, paver_block]
+    device: auto
+    materials: [asphalt, concrete, mud, gravel]
+    unevenness: [smooth, slight, severe]
+    optional: true   # if weights file missing, server still starts
 
   depth:
     # Indoor variant works better for close-up pothole shots (<10m range).
@@ -38,6 +40,7 @@ models:
 pipeline:
   frame_stride: 3
   min_pothole_area_px: 100
+  material_inference_every_n_frames: 30   # ~1 second @ 30fps; aggregated for the video
   ground_plane:
     ransac_threshold_m: 0.05
     ransac_iterations: 1000

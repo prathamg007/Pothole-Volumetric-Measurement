@@ -20,7 +20,11 @@
       "Bash(D:/UGP_amarb/codebase/legacy/InfraSight/venv/Scripts/pip.exe list *)",
       "Bash(echo \"---exit=$?\")",
       "Bash(D:/UGP_amarb/codebase/legacy/InfraSight/venv/Scripts/pip.exe --version)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "WebSearch",
+      "WebFetch(domain:thu-rsxd.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl *)"
     ]
   }
 }

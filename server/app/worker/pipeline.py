@@ -47,12 +47,14 @@ def process_video(
     intr_cfg = cfg["intrinsics"]
     gp_cfg = cfg["pipeline"]["ground_plane"]
     stride = int(cfg["pipeline"].get("frame_stride", 1))
+    material_every = int(cfg["pipeline"].get("material_inference_every_n_frames", 30))
 
     if not models.is_ready():
         models.load_all()
     segmenter = models.segmenter
     crack_clf = models.crack_clf
     depth_model = models.depth
+    material_clf = models.material  # may be None if weights missing
 
     device_key = intr_cfg["fallback_device"]
     device_cfg = intr_cfg["devices"][device_key]
@@ -72,6 +74,8 @@ def process_video(
     plane_refit_every = max(int(info.fps), 5)  # refit ~once per second
 
     crack_counts: dict[str, int] = defaultdict(int)
+    # Material accumulator: each entry is the per-frame predict() dict
+    material_predictions: list[dict] = []
     frame_idx = 0
     t_start = time.time()
     inference_time = 0.0
@@ -137,6 +141,14 @@ def process_video(
             for c in crack_dets:
                 crack_counts[c.class_name] += 1
 
+            # Material classifier — sparser cadence
+            if material_clf is not None and frame_idx % material_every == 0:
+                try:
+                    mat_pred = material_clf.predict(frame_rgb)
+                    material_predictions.append(mat_pred)
+                except Exception as e:
+                    log.warning(f"material classifier failed on frame {frame_idx}: {e}")
+
             inference_time += time.time() - t_inf
 
         running = {"potholes": len(tracker.tracks), "cracks": sum(crack_counts.values())}
@@ -162,6 +174,10 @@ def process_video(
     cap.release()
     writer.release()
 
+    # Aggregate material classifier predictions across frames
+    road_surface = _aggregate_road_surface(material_predictions)
+    repair_surface_type = _map_to_repair_surface(road_surface.get("material") if road_surface else None)
+
     # Aggregate per-track
     tracks_summary = tracker.finalize(min_observations=2, min_valid_measurements=1)
     potholes_report: list[dict] = []
@@ -174,6 +190,7 @@ def process_video(
             depth_cm=t["avg_depth_cm"],
             area_cm2=t["area_cm2"],
             severity_level=sev_res.level,
+            surface_type=repair_surface_type,
         )
         potholes_report.append(
             {
@@ -218,6 +235,7 @@ def process_video(
             "frame_stride": stride,
         },
         "cracks": dict(crack_counts),
+        "road_surface": road_surface,
         "potholes": potholes_report,
         "summary": {
             "num_potholes": len(potholes_report),
@@ -227,7 +245,47 @@ def process_video(
             "total_cost": round(totals["cost"], 2),
             "currency": cfg["repair"]["currency"],
             "total_cracks_detected": sum(crack_counts.values()),
+            "road_material": road_surface.get("material") if road_surface else None,
+            "road_unevenness": road_surface.get("unevenness") if road_surface else None,
         },
     }
     log.info(f"Done. {frame_idx} frames in {elapsed:.1f}s (inference {inference_time:.1f}s)")
     return report
+
+
+def _aggregate_road_surface(predictions: list[dict]) -> dict | None:
+    """Combine per-frame material/unevenness predictions into a single video-level summary."""
+    if not predictions:
+        return None
+    # Sum per-class probabilities, then pick the argmax — this is more robust than
+    # majority-voting because it weights confident predictions higher.
+    mat_sums: dict[str, float] = defaultdict(float)
+    uneven_sums: dict[str, float] = defaultdict(float)
+    for p in predictions:
+        for name, prob in p.get("all_materials", {}).items():
+            mat_sums[name] += float(prob)
+        for name, prob in p.get("all_unevenness", {}).items():
+            uneven_sums[name] += float(prob)
+    n = len(predictions)
+    mat_avg = {k: v / n for k, v in mat_sums.items()}
+    uneven_avg = {k: v / n for k, v in uneven_sums.items()}
+    top_mat = max(mat_avg, key=mat_avg.get) if mat_avg else None
+    top_uneven = max(uneven_avg, key=uneven_avg.get) if uneven_avg else None
+    return {
+        "material": top_mat,
+        "material_confidence": round(mat_avg.get(top_mat, 0.0), 3) if top_mat else None,
+        "unevenness": top_uneven,
+        "unevenness_confidence": round(uneven_avg.get(top_uneven, 0.0), 3) if top_uneven else None,
+        "frames_used": n,
+        "material_distribution": {k: round(v, 3) for k, v in sorted(mat_avg.items(), key=lambda kv: -kv[1])},
+        "unevenness_distribution": {k: round(v, 3) for k, v in sorted(uneven_avg.items(), key=lambda kv: -kv[1])},
+    }
+
+
+def _map_to_repair_surface(predicted_material: str | None) -> str:
+    """Map RSCD material classes -> RepairAdvisor surface_type domain.
+    RepairAdvisor knows 'asphalt' and 'concrete'. mud/gravel/None default to asphalt
+    (common case in Indian roads; advisor handles the rest)."""
+    if predicted_material == "concrete":
+        return "concrete"
+    return "asphalt"
