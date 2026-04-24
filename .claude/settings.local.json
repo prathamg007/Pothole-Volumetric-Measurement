@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(robocopy InfraSight legacy/InfraSight /E /MOVE /R:1 /W:1 /NFL /NDL /NJH /NJS /NC /NS /NP)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(cmd.exe /c \"robocopy InfraSight legacy\\\\\\\\InfraSight /E /MOVE /R:2 /W:1 /NFL /NDL /NJH /NJS /NC /NS /NP\")",
+      "Bash(cmd.exe /c \"robocopy InfraSight legacy\\\\\\\\InfraSight /E /MOVE /R:2 /W:1\")",
+      "PowerShell(Move-Item *)",
+      "Bash(D:/UGP_amarb/codebase/legacy/road-anomaly-detection/venv/Scripts/python.exe scripts/verify_weights.py)",
+      "Bash(D:/UGP_amarb/codebase/legacy/InfraSight/venv/Scripts/python.exe *)",
+      "Bash(git --version)",
+      "Bash(git config *)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}

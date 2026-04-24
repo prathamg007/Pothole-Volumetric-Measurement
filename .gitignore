@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS metadata
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Legacy repos — preserved on disk for reference, not tracked in new git history.
+# Copy from here into server/weights/ when needed.
+legacy/
+InfraSight/
+
+# Large model weights — copy/download as needed, do not commit
+server/weights/*.pt
+server/weights/*.pth
+server/weights/*.safetensors
+server/weights/*.onnx
+
+# Runtime uploads + processed outputs
+server/data/uploads/*
+server/data/results/*
+!server/data/uploads/.gitkeep
+!server/data/results/.gitkeep
+!server/weights/.gitkeep
+
+# Flutter (for Phase 6)
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/pubspec.lock
+mobile/android/.gradle/
+mobile/android/app/build/
+mobile/ios/Pods/
+mobile/ios/Runner.xcworkspace/xcuserdata/
+
+# Training artifacts (for Phase 5)
+training/**/runs/
+training/**/data/
+training/**/*.pt
+
+# Auto-generated conversation transcript
+CONVERSATION.md
+
+# Logs / coverage
+*.log
+.coverage
+htmlcov/

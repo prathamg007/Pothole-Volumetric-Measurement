@@ -1,0 +1,87 @@
+server:
+  host: 0.0.0.0
+  port: 8000
+  upload_dir: data/uploads
+  results_dir: data/results
+  max_upload_mb: 200
+
+models:
+  pothole_segmenter:
+    weights: weights/pothole_seg.pt
+    conf_threshold: 0.25
+    classes:
+      0: Manhole
+      1: Pothole
+      2: Unmarked Bump
+
+  crack_classifier:
+    weights: weights/crack_typology.pt
+    conf_threshold: 0.30
+    classes:
+      0: Longitudinal Crack
+      1: Transverse Crack
+      2: Alligator Crack
+      3: Potholes
+    ignore_classes: [3]
+
+  material_classifier:
+    weights: weights/material_classifier.pt
+    conf_threshold: 0.50
+    classes: [asphalt, concrete, paver_block]
+
+  depth:
+    # Indoor variant works better for close-up pothole shots (<10m range).
+    # KITTI-trained outdoor variant floor-clips at ~4m and inflates areas.
+    model_name: depth-anything/Depth-Anything-V2-Metric-Indoor-Small-hf
+    device: auto
+
+pipeline:
+  frame_stride: 3
+  min_pothole_area_px: 100
+  ground_plane:
+    ransac_threshold_m: 0.05
+    ransac_iterations: 1000
+    min_inliers: 0.15
+    max_depth_m: 15.0   # ignore sky/far-field when fitting
+
+intrinsics:
+  fallback_device: oneplus_12
+  devices:
+    oneplus_12:
+      focal_length_mm: 5.89
+      sensor_width_mm: 7.04
+      sensor_height_mm: 5.28
+
+severity:
+  weights:
+    depth: 0.40
+    area: 0.30
+    volume: 0.30
+  thresholds:
+    low: {depth_cm: 2.5, area_cm2: 200, volume_cm3: 500}
+    medium: {depth_cm: 5.0, area_cm2: 700, volume_cm3: 3500}
+    high: {depth_cm: 10.0, area_cm2: 2000, volume_cm3: 20000}
+
+repair:
+  currency: INR
+  materials:
+    cold_mix_asphalt:
+      density_kg_per_cm3: 0.0021
+      price_per_kg: 80
+      compaction_factor: 1.25
+    hot_mix_asphalt:
+      density_kg_per_cm3: 0.0023
+      price_per_kg: 45
+      compaction_factor: 1.15
+    concrete_patch:
+      density_kg_per_cm3: 0.0024
+      price_per_kg: 30
+      compaction_factor: 1.10
+  labor:
+    throw_and_roll: 700
+    semi_permanent: 2000
+    full_depth: 10000
+  durability_months:
+    throw_and_roll: 3
+    semi_permanent: 18
+    full_depth: 60
