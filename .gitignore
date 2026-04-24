@@ -38,6 +38,10 @@ server/weights/*.onnx
 # Runtime uploads + processed outputs
 server/data/uploads/*
 server/data/results/*
+server/data/*.db
+server/data/*.sqlite
+server/data/*.sqlite3
+server/data/*.log
 !server/data/uploads/.gitkeep
 !server/data/results/.gitkeep
 !server/weights/.gitkeep

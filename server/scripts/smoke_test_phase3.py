@@ -15,6 +15,7 @@ sys.path.insert(0, str(SERVER_ROOT))
 
 from app.utils.config import load_config
 from app.utils.logger import get_logger
+from app.worker.models_registry import ModelRegistry
 from app.worker.pipeline import process_video
 
 log = get_logger("smoke_phase3")
@@ -32,7 +33,9 @@ def main() -> int:
         return 1
 
     cfg = load_config()
-    report = process_video(input_video, output_video, cfg)
+    models = ModelRegistry(cfg)
+    models.load_all()
+    report = process_video(input_video, output_video, cfg, models=models)
 
     # Print summary
     print()

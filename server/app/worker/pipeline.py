@@ -9,18 +9,15 @@ from typing import Optional
 import cv2
 import numpy as np
 
-from app.models.crack_classifier import CrackClassifier
-from app.models.depth_metric import MetricDepthEstimator
-from app.models.pothole_segmenter import PotholeSegmenter
 from app.physics.ground_plane import Plane, fit_ground_plane
 from app.physics.intrinsics import backproject, compute_K
 from app.physics.repair_advisor import RepairAdvisor
 from app.physics.severity import SeverityClassifier
 from app.physics.volumetric import measure_pothole
-from app.utils.config import resolve_path
 from app.utils.logger import get_logger
 from app.utils.video_io import make_writer, probe_video
 from app.worker.annotator import annotate_frame
+from app.worker.models_registry import ModelRegistry
 from app.worker.tracker import PotholeTracker
 
 log = get_logger("pipeline")
@@ -30,6 +27,7 @@ def process_video(
     input_video: Path,
     output_video: Path,
     cfg: dict,
+    models: ModelRegistry,
     *,
     exif_reference_image: Optional[Path] = None,
     progress_every: int = 30,
@@ -37,6 +35,8 @@ def process_video(
     """Run the full pipeline on a video.
 
     Returns a structured report dict with per-pothole measurements + summary.
+
+    The caller owns the ModelRegistry — models are loaded once and reused across jobs.
     """
     info = probe_video(input_video)
     log.info(
@@ -44,26 +44,15 @@ def process_video(
         f"{info.frame_count} frames ({info.duration_s:.1f}s)"
     )
 
-    seg_cfg = cfg["models"]["pothole_segmenter"]
-    crk_cfg = cfg["models"]["crack_classifier"]
-    depth_cfg = cfg["models"]["depth"]
     intr_cfg = cfg["intrinsics"]
     gp_cfg = cfg["pipeline"]["ground_plane"]
     stride = int(cfg["pipeline"].get("frame_stride", 1))
 
-    log.info("Loading models...")
-    t0 = time.time()
-    segmenter = PotholeSegmenter(
-        weights_path=resolve_path(seg_cfg["weights"]),
-        conf_threshold=seg_cfg["conf_threshold"],
-    )
-    crack_clf = CrackClassifier(
-        weights_path=resolve_path(crk_cfg["weights"]),
-        conf_threshold=crk_cfg["conf_threshold"],
-        ignore_classes=crk_cfg.get("ignore_classes", []),
-    )
-    depth_model = MetricDepthEstimator(model_name=depth_cfg["model_name"], device=depth_cfg["device"])
-    log.info(f"Models loaded in {time.time()-t0:.1f}s")
+    if not models.is_ready():
+        models.load_all()
+    segmenter = models.segmenter
+    crack_clf = models.crack_clf
+    depth_model = models.depth
 
     device_key = intr_cfg["fallback_device"]
     device_cfg = intr_cfg["devices"][device_key]
