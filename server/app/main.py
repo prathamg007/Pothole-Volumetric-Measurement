@@ -4,6 +4,8 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.routes import analyze, health
 from app.utils.config import load_config
@@ -57,7 +59,15 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(analyze.router)
 
+# Mount the PWA at /app/. The trailing slash + html=True serves index.html.
+_static_dir = SERVER_ROOT / "static" / "app"
+if _static_dir.exists():
+    app.mount("/app", StaticFiles(directory=_static_dir, html=True), name="app")
+
 
 @app.get("/")
 def root():
+    # If the PWA is bundled, route the root to it; otherwise return service info.
+    if _static_dir.exists():
+        return RedirectResponse(url="/app/")
     return {"service": "road-anomaly-analysis", "version": app.version, "docs": "/docs"}

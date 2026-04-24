@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="css/style.css">
+  <title>Road Anomaly Analysis</title>
+</head>
+<body>
+  <main id="app">
+
+    <!-- HOME -->
+    <section id="view-home" class="view active">
+      <header class="topbar">
+        <h1>Road Anomaly Analysis</h1>
+        <span id="server-status" class="status status-unknown">checking…</span>
+      </header>
+      <div class="content">
+        <div class="card">
+          <label class="field-label" for="server-url">Server</label>
+          <input type="text" id="server-url" placeholder="http://192.168.x.x:8000">
+          <button class="btn btn-secondary" id="btn-test-server">Test connection</button>
+        </div>
+
+        <button class="btn btn-primary big" id="btn-record">
+          <span class="icon">●</span>
+          <span>Record New Video</span>
+        </button>
+
+        <h2>Recent jobs</h2>
+        <div id="jobs-list" class="jobs-list">
+          <p class="muted">No jobs yet.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- RECORDER -->
+    <section id="view-recorder" class="view view-fullscreen">
+      <video id="camera-preview" autoplay playsinline muted></video>
+      <div class="recorder-overlay">
+        <div class="recorder-top">
+          <button class="icon-btn" id="btn-cancel-record">✕</button>
+          <div class="rec-info">
+            <span id="rec-time" class="rec-time">00:00</span>
+            <span id="rec-imu-count" class="rec-imu">IMU 0</span>
+          </div>
+        </div>
+        <div id="rec-indicator" class="rec-indicator hidden">REC</div>
+        <div class="recorder-bottom">
+          <button id="btn-toggle-record" class="record-btn">
+            <span class="record-btn-inner"></span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- UPLOAD -->
+    <section id="view-upload" class="view">
+      <header class="topbar">
+        <button class="icon-btn" id="btn-back-upload">←</button>
+        <h1>Review &amp; upload</h1>
+      </header>
+      <div class="content">
+        <div class="card">
+          <video id="upload-preview" controls playsinline></video>
+        </div>
+        <div class="card">
+          <div class="kv"><span>Duration</span><span id="upload-duration">—</span></div>
+          <div class="kv"><span>Video size</span><span id="upload-size">—</span></div>
+          <div class="kv"><span>IMU samples</span><span id="upload-imu">—</span></div>
+        </div>
+        <button class="btn btn-primary big" id="btn-upload">Process video</button>
+        <div id="upload-progress-card" class="card hidden">
+          <div class="kv"><span>Upload</span><span id="upload-pct">0%</span></div>
+          <progress id="upload-progress" max="100" value="0"></progress>
+          <p id="job-status" class="muted">—</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESULTS -->
+    <section id="view-results" class="view">
+      <header class="topbar">
+        <button class="icon-btn" id="btn-back-results">←</button>
+        <h1>Results</h1>
+      </header>
+      <div class="content">
+        <div class="card">
+          <video id="result-video" controls playsinline></video>
+        </div>
+
+        <div class="card" id="card-road">
+          <h3>Road condition</h3>
+          <div class="kv"><span>Material</span><span id="road-material">—</span></div>
+          <div class="kv"><span>Unevenness</span><span id="road-unevenness">—</span></div>
+        </div>
+
+        <div class="card" id="card-summary">
+          <h3>Summary</h3>
+          <div class="kv"><span>Potholes detected</span><span id="sum-potholes">—</span></div>
+          <div class="kv"><span>Total damaged area</span><span id="sum-area">—</span></div>
+          <div class="kv"><span>Total volume</span><span id="sum-volume">—</span></div>
+          <div class="kv"><span>Cracks detected</span><span id="sum-cracks">—</span></div>
+          <div class="kv"><span>Total repair cost</span><span id="sum-cost" class="big-number">—</span></div>
+        </div>
+
+        <h2>Pothole details</h2>
+        <div id="potholes-list" class="potholes-list"></div>
+
+        <button class="btn btn-secondary big" id="btn-done-results">Done</button>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="js/api.js"></script>
+  <script src="js/recorder.js"></script>
+  <script src="js/results.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

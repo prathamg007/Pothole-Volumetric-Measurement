@@ -42,6 +42,7 @@ server/data/*.db
 server/data/*.sqlite
 server/data/*.sqlite3
 server/data/*.log
+server/data/dev_cert/
 !server/data/uploads/.gitkeep
 !server/data/results/.gitkeep
 !server/weights/.gitkeep
