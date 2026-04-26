@@ -26,6 +26,12 @@ piexif>=1.1.3
 numpy>=1.24.0
 scipy>=1.11.0
 
+# 3D pothole tomography
+plotly>=5.17.0
+# Optional: kaleido enables PNG export of 3D meshes for the report.
+# Install only if you need PNG output (requires Chromium binary).
+# kaleido>=0.2.1
+
 # Utils
 pyyaml>=6.0
 tqdm>=4.66.0

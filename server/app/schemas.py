@@ -50,6 +50,8 @@ class PotholeResult(BaseModel):
     repair_cost: float
     currency: str
     durability_months: int
+    mesh_html: Optional[str] = None
+    mesh_png: Optional[str] = None
 
 
 class VideoInfoDto(BaseModel):

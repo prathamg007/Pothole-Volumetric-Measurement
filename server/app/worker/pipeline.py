@@ -17,9 +17,15 @@ from app.physics.volumetric import measure_pothole
 from app.utils.imu import angle_between_deg, summarize as summarize_imu
 from app.utils.logger import get_logger
 from app.utils.video_io import make_writer, normalize_input, probe_video, transcode_for_web
+from app.visualization.mesh_engine import render_pothole_mesh_to_html, render_pothole_mesh_to_png
 from app.worker.annotator import annotate_frame
 from app.worker.models_registry import ModelRegistry
 from app.worker.tracker import BBoxTracker, PotholeTracker
+
+# Padding around each pothole bbox for the mesh crop (pixels). The mesh
+# renderer needs context around the pothole to display the surrounding road
+# as a flat reference plane.
+_MESH_CROP_PADDING_PX = 50
 
 log = get_logger("pipeline")
 
@@ -168,6 +174,32 @@ def process_video(
 
             track_ids = tracker.update(frame_idx, pot_with_meas)
 
+            # For each detection that produced a measurement on this frame,
+            # consider whether it's the new "best" (highest-confidence)
+            # observation for its track. If so, save the cropped mask/depth/
+            # image so we can render its 3D mesh after finalize. Crop is
+            # bbox + padding, clamped to frame bounds. depth_m is in scope
+            # here because it was just computed in the `if pothole_dets:`
+            # branch above (pot_with_meas is non-empty only via that branch).
+            if pothole_dets:
+                for (det, m), tid in zip(pot_with_meas, track_ids):
+                    if m is None:
+                        continue
+                    x1, y1, x2, y2 = det.bbox
+                    y_lo = max(0, y1 - _MESH_CROP_PADDING_PX)
+                    y_hi = min(info.height, y2 + _MESH_CROP_PADDING_PX)
+                    x_lo = max(0, x1 - _MESH_CROP_PADDING_PX)
+                    x_hi = min(info.width, x2 + _MESH_CROP_PADDING_PX)
+                    if y_hi <= y_lo or x_hi <= x_lo:
+                        continue
+                    mask_crop = det.mask[y_lo:y_hi, x_lo:x_hi]
+                    depth_crop = depth_m[y_lo:y_hi, x_lo:x_hi]
+                    image_crop = frame_rgb[y_lo:y_hi, x_lo:x_hi]
+                    tracker.maybe_update_best_obs(
+                        tid, det.confidence, frame_idx,
+                        mask_crop, depth_crop, image_crop,
+                    )
+
             last_potholes_annot = []
             for (det, m), tid in zip(pot_with_meas, track_ids):
                 sev_res = sev.classify(m.avg_depth_cm, m.area_cm2, m.volume_cm3) if m is not None else None
@@ -283,6 +315,9 @@ def process_video(
     potholes_report: list[dict] = []
     totals = {"area_cm2": 0.0, "volume_cm3": 0.0, "material_kg": 0.0, "cost": 0.0}
 
+    # Mesh outputs land alongside the annotated video.
+    meshes_dir = output_video.parent / "meshes"
+
     for t in tracks_summary:
         sev_res = sev.classify(t["avg_depth_cm"], t["area_cm2"], t["volume_cm3"])
         rec = advisor.recommend(
@@ -292,6 +327,50 @@ def process_video(
             severity_level=sev_res.level,
             surface_type=repair_surface_type,
         )
+
+        # Render the 3D pothole mesh from the track's best (highest
+        # confidence) observation. HTML is the primary deliverable; PNG is
+        # best-effort (requires kaleido + Chromium, may silently fail).
+        mesh_html_rel: str | None = None
+        mesh_png_rel: str | None = None
+        track_obj = tracker.find(t["track_id"])
+        if (
+            track_obj is not None
+            and track_obj.best_mask_crop is not None
+            and track_obj.best_depth_crop is not None
+        ):
+            try:
+                html_path = meshes_dir / f"mesh_{t['track_id']}.html"
+                render_pothole_mesh_to_html(
+                    depth_cropped=track_obj.best_depth_crop,
+                    mask_cropped=track_obj.best_mask_crop,
+                    out_path=html_path,
+                    image_cropped=track_obj.best_image_crop,
+                    metrics={
+                        "depth": float(t["max_depth_cm"]),
+                        "area": float(t["area_cm2"]),
+                        "severity": sev_res.level,
+                    },
+                )
+                mesh_html_rel = f"meshes/mesh_{t['track_id']}.html"
+            except Exception as e:
+                log.warning(f"mesh HTML failed for track {t['track_id']}: {e}")
+
+            png_path = meshes_dir / f"mesh_{t['track_id']}.png"
+            png_result = render_pothole_mesh_to_png(
+                depth_cropped=track_obj.best_depth_crop,
+                mask_cropped=track_obj.best_mask_crop,
+                out_path=png_path,
+                image_cropped=track_obj.best_image_crop,
+                metrics={
+                    "depth": float(t["max_depth_cm"]),
+                    "area": float(t["area_cm2"]),
+                    "severity": sev_res.level,
+                },
+            )
+            if png_result is not None:
+                mesh_png_rel = f"meshes/mesh_{t['track_id']}.png"
+
         potholes_report.append(
             {
                 "track_id": t["track_id"],
@@ -313,6 +392,8 @@ def process_video(
                 "repair_cost": rec.total_cost,
                 "currency": rec.currency,
                 "durability_months": rec.durability_months,
+                "mesh_html": mesh_html_rel,
+                "mesh_png": mesh_png_rel,
             }
         )
         totals["area_cm2"] += t["area_cm2"]

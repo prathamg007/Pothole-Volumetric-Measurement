@@ -15,7 +15,9 @@
   }
 
   const Results = {
+    _jobId: null,
     render(report, jobId) {
+      this._jobId = jobId;
       const v = document.getElementById("result-video");
       v.src = Api.videoUrl(jobId) + `?t=${Date.now()}`;
 
@@ -62,6 +64,7 @@
         const sev = p.severity_level || "";
         const row = document.createElement("div");
         row.className = `pothole-row sev-${sev}`;
+        const has3D = !!p.mesh_html;
         row.innerHTML = `
           <div class="top-line">
             <strong>#${p.track_id} · ${(p.first_time_s || 0).toFixed(1)}s</strong>
@@ -76,6 +79,13 @@
           <div class="meta">
             <span>${p.repair_method || ""} · ${(p.material_kg || 0).toFixed(1)} kg ${p.material_name || ""}</span>
           </div>
+          ${has3D ? `
+          <div class="pothole-actions">
+            <a class="btn-3d" target="_blank" rel="noopener"
+               href="${Api.meshUrl(jobId, p.track_id)}">
+              <span class="icon">⛰</span> View 3D Tomography
+            </a>
+          </div>` : ``}
         `;
         list.appendChild(row);
       }

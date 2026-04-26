@@ -27,6 +27,15 @@ class Track:
     first_frame: int
     last_frame: int
     observations: list[TrackObservation] = field(default_factory=list)
+    # Best (highest-confidence) observation's crops, used by the 3D mesh
+    # visualizer at finalize time. Populated by the pipeline via
+    # PotholeTracker.maybe_update_best_obs(); the tracker itself stays
+    # geometry-only.
+    best_confidence: float = -1.0
+    best_frame_idx: int = -1
+    best_mask_crop: Optional[np.ndarray] = None
+    best_depth_crop: Optional[np.ndarray] = None
+    best_image_crop: Optional[np.ndarray] = None
 
     @property
     def last_bbox(self) -> tuple[int, int, int, int]:
@@ -55,6 +64,38 @@ class PotholeTracker:
         self._next_id = 1
         self.iou_threshold = float(iou_threshold)
         self.max_gap_frames = int(max_gap_frames)
+
+    def find(self, track_id: int) -> Optional[Track]:
+        for tr in self.tracks:
+            if tr.track_id == track_id:
+                return tr
+        return None
+
+    def maybe_update_best_obs(
+        self,
+        track_id: int,
+        confidence: float,
+        frame_idx: int,
+        mask_crop: np.ndarray,
+        depth_crop: np.ndarray,
+        image_crop: Optional[np.ndarray] = None,
+    ) -> bool:
+        """Save the best (highest-confidence) per-track observation's crops
+        for later 3D mesh rendering. Returns True if this observation became
+        the new best.
+        """
+        tr = self.find(track_id)
+        if tr is None:
+            return False
+        if confidence <= tr.best_confidence:
+            return False
+        tr.best_confidence = float(confidence)
+        tr.best_frame_idx = int(frame_idx)
+        # Copy because the caller may mutate or free these arrays.
+        tr.best_mask_crop = mask_crop.copy()
+        tr.best_depth_crop = depth_crop.copy()
+        tr.best_image_crop = image_crop.copy() if image_crop is not None else None
+        return True
 
     def update(
         self,

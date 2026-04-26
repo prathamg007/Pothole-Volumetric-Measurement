@@ -132,6 +132,36 @@ async def get_video(request: Request, job_id: str):
     return FileResponse(path, media_type="video/mp4", filename=f"{job_id}.mp4")
 
 
+@router.get("/jobs/{job_id}/mesh/{track_id}")
+async def get_mesh(request: Request, job_id: str, track_id: int):
+    """Serve the 3D pothole mesh HTML for a single track."""
+    job = request.app.state.jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, f"Job {job_id} not found")
+    if job["status"] != "completed":
+        raise HTTPException(409, f"Job is {job['status']} — no mesh yet")
+    video_path = Path(job["output_video_path"] or "")
+    mesh_path = video_path.parent / "meshes" / f"mesh_{track_id}.html"
+    if not mesh_path.exists():
+        raise HTTPException(404, f"Mesh for track {track_id} not found")
+    return FileResponse(mesh_path, media_type="text/html")
+
+
+@router.get("/jobs/{job_id}/mesh/{track_id}.png")
+async def get_mesh_png(request: Request, job_id: str, track_id: int):
+    """Serve the rasterized PNG of the 3D mesh (best-effort, requires kaleido)."""
+    job = request.app.state.jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, f"Job {job_id} not found")
+    if job["status"] != "completed":
+        raise HTTPException(409, f"Job is {job['status']} — no mesh yet")
+    video_path = Path(job["output_video_path"] or "")
+    png_path = video_path.parent / "meshes" / f"mesh_{track_id}.png"
+    if not png_path.exists():
+        raise HTTPException(404, f"Mesh PNG for track {track_id} not found")
+    return FileResponse(png_path, media_type="image/png")
+
+
 def _read_json(path: Path):
     import json
 

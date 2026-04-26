@@ -24,16 +24,25 @@ Thumbs.db
 .DS_Store
 desktop.ini
 
-# Legacy repos — preserved on disk for reference, not tracked in new git history.
-# Copy from here into server/weights/ when needed.
+# Legacy repos — preserved on disk for reference, not tracked
 legacy/
-InfraSight/
 
-# Large model weights — copy/download as needed, do not commit
+# Report — LaTeX source + generated PDF (kept separately)
+report/
+
+# Claude / AI agent artifacts
+.claude/
+CLAUDE.md
+CONVERSATION.md
+_make_transcript.py
+project_memory/
+
+# Large model weights — download separately (see README)
 server/weights/*.pt
 server/weights/*.pth
 server/weights/*.safetensors
 server/weights/*.onnx
+!server/weights/.gitkeep
 
 # Runtime uploads + processed outputs
 server/data/uploads/*
@@ -45,27 +54,14 @@ server/data/*.log
 server/data/dev_cert/
 !server/data/uploads/.gitkeep
 !server/data/results/.gitkeep
-!server/weights/.gitkeep
 
-# Flutter (for Phase 6)
-mobile/.dart_tool/
-mobile/build/
-mobile/.flutter-plugins
-mobile/.flutter-plugins-dependencies
-mobile/.packages
-mobile/pubspec.lock
-mobile/android/.gradle/
-mobile/android/app/build/
-mobile/ios/Pods/
-mobile/ios/Runner.xcworkspace/xcuserdata/
+# Flutter (mobile placeholder)
+mobile/
 
-# Training artifacts (for Phase 5)
+# Training artifacts — keep scripts, exclude data and runs
 training/**/runs/
 training/**/data/
 training/**/*.pt
-
-# Auto-generated conversation transcript
-CONVERSATION.md
 
 # Logs / coverage
 *.log

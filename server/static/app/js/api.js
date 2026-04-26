@@ -36,6 +36,14 @@
       return `${this.base}/jobs/${id}/video`;
     },
 
+    meshUrl(id, trackId) {
+      return `${this.base}/jobs/${id}/mesh/${trackId}`;
+    },
+
+    meshPngUrl(id, trackId) {
+      return `${this.base}/jobs/${id}/mesh/${trackId}.png`;
+    },
+
     /** Multipart upload via XHR so we can track progress.
      * @param {Blob} videoBlob   The recorded video
      * @param {Object|null} sensorsJson  Optional IMU sidecar (object, will be stringified)
