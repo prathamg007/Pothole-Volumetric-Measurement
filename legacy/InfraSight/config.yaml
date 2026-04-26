@@ -1,0 +1,75 @@
+# InfraSight Configuration File
+
+# Model Configurations
+models:
+  yolo:
+    architecture: "yolov8m-seg"  # Segmentation model (pretrained + fine-tuned)
+    # Priority: multiple_pothole > indonesian_finetuned > rdd_finetuned
+    weights_path: "weights/phase1_segmentation_v1.pt"
+    weights_fallback: "runs/detect/models/weights/pothole_seg/indonesian_finetune/weights/best.pt"
+    weights_legacy: "models/weights/pothole_det/best.pt"
+    conf_threshold: 0.25  # Restored — finetuned model has high confidence
+    iou_threshold: 0.45
+    classes:
+      0: "pothole"
+      1: "reference_object"  # card or coin
+  
+  depth:
+    model_name: "depth-anything/Depth-Anything-V2-Small-hf"  # -hf variant for transformers
+    device: "cuda"  # or "cpu"
+
+  material:
+    weights_path: "models/weights/road_material/material_classifier_v1.pt"
+    classes: ["asphalt", "concrete", "paving"]
+    confidence_threshold: 0.6
+
+# Reference Object Specifications (in cm) - CARD PRIORITIZED
+reference_objects:
+  card_standard:  # PRIMARY - Easier detection
+    width: 8.5
+    height: 5.4
+    area_cm2: 45.9  # 8.5 × 5.4
+    type: "rectangle"
+  coin_rp500:  # BACKUP - Harder to detect from distance
+    diameter: 2.7
+    area_cm2: 5.73  # π × (1.35)²
+    type: "circle"
+
+# Calibration
+volumetric:
+  calibration_constant: 30.0  # Empirical: multiply normalized depth to get cm
+  depth_percentile: 10  # Use bottom 10% deepest pixels for pothole depth
+  min_pothole_area_px: 100  # Minimum pothole area in pixels
+
+# Severity Classification
+severity:
+  weight_depth: 0.40
+  weight_area: 0.30
+  weight_volume: 0.30
+
+# Repair Cost Estimation (IDR)
+repair:
+  currency: "IDR"
+  labor_rates:
+    throw_and_roll: 50000
+    semi_permanent: 150000
+    full_depth: 500000
+
+# Dataset Paths
+data:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  rdd2022_path: "data/raw/RDD2022"
+  roboflow_path: "data/raw/roboflow_pothole"
+
+# Application Settings
+app:
+  title: "InfraSight - Pothole Volumetric Analysis"
+  max_upload_size: 10  # MB
+  default_camera_height: 150  # cm (assumed if not calibrated)
+  page_icon: "🕳️"
+
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

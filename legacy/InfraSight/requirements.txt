@@ -1,0 +1,42 @@
+# Deep Learning Framework (CUDA-enabled for local GPU)
+# NOTE: Install CUDA version separately:
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118  # For CUDA 11.8
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121  # For CUDA 12.1
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Computer Vision
+opencv-python>=4.8.0
+ultralytics>=8.0.200        # YOLOv8 from Ultralytics
+transformers>=4.35.0        # HuggingFace for Depth Anything
+timm>=0.9.0                 # Required by Depth Anything
+
+# Dataset Management
+dataset-tools               # For RDD2022 download
+roboflow>=1.1.0
+
+# Numerical & Scientific
+numpy>=1.24.0
+scipy>=1.11.0
+
+# 3D Visualization
+plotly>=5.17.0
+
+# Phase 7: Advanced Features (Material Classification + GPS)
+# Material Classification
+timm>=0.9.0  # For MobileNetV3
+
+# GPS & Mapping
+geopy>=2.4.0  # Reverse geocoding
+streamlit-folium>=0.15.0  # Interactive maps in Streamlit
+folium>=0.15.0  # Leaflet.js maps
+
+# Web Interface
+streamlit>=1.28.0
+streamlit-option-menu>=0.3.6
+
+# Utilities
+pyyaml>=6.0
+pillow>=10.0.0
+tqdm>=4.66.0
+python-dotenv>=1.0.0

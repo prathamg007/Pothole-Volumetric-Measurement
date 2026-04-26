@@ -24,8 +24,23 @@ Thumbs.db
 .DS_Store
 desktop.ini
 
-# Legacy repos — preserved on disk for reference, not tracked
-legacy/
+# Legacy repos — include source code, exclude heavy artifacts
+legacy/**/venv/
+legacy/**/.git/
+legacy/**/.git_bak/
+legacy/**/runs/
+legacy/**/dataset/
+legacy/**/output/
+legacy/**/inference_output/
+legacy/**/node_modules/
+legacy/**/__pycache__/
+legacy/**/*.pt
+legacy/**/*.pth
+legacy/**/*.mp4
+legacy/**/*.png
+legacy/**/*.jpg
+legacy/**/*.jpeg
+legacy/**/events.out.tfevents.*
 
 # Report — LaTeX source + generated PDF (kept separately)
 report/
