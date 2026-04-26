@@ -46,6 +46,16 @@ pipeline:
     ransac_iterations: 1000
     min_inliers: 0.15
     max_depth_m: 15.0   # ignore sky/far-field when fitting
+  pothole_tracking:
+    iou_threshold: 0.15        # lenient: handheld camera motion = bbox jumps
+    max_gap_frames: 30         # ~1s @ 30fps
+    min_observations: 5        # require persistence to avoid flash false positives
+    min_avg_depth_cm: 0.5      # filter near-zero-depth detections
+    min_area_cm2: 50           # filter unrealistically tiny detections
+  crack_tracking:
+    iou_threshold: 0.15
+    max_gap_frames: 30
+    min_observations: 3
 
 intrinsics:
   fallback_device: oneplus_12

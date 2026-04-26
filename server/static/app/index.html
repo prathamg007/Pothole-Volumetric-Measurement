@@ -31,6 +31,12 @@
           <span>Record New Video</span>
         </button>
 
+        <button class="btn btn-secondary big" id="btn-upload-existing">
+          <span class="icon">↑</span>
+          <span>Upload existing video</span>
+        </button>
+        <input type="file" id="file-input" accept="video/*" hidden>
+
         <h2>Recent jobs</h2>
         <div id="jobs-list" class="jobs-list">
           <p class="muted">No jobs yet.</p>
@@ -97,6 +103,13 @@
           <h3>Road condition</h3>
           <div class="kv"><span>Material</span><span id="road-material">—</span></div>
           <div class="kv"><span>Unevenness</span><span id="road-unevenness">—</span></div>
+        </div>
+
+        <div class="card hidden" id="card-imu">
+          <h3>IMU sanity check</h3>
+          <div class="kv"><span>IMU samples</span><span id="imu-samples">—</span></div>
+          <div class="kv"><span>Plane vs gravity</span><span id="imu-agreement">—</span></div>
+          <div class="kv"><span>Mean mismatch</span><span id="imu-mean">—</span></div>
         </div>
 
         <div class="card" id="card-summary">

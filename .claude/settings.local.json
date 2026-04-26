@@ -24,7 +24,9 @@
       "WebSearch",
       "WebFetch(domain:thu-rsxd.com)",
       "WebFetch(domain:github.com)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(ffmpeg -version)",
+      "Bash(ffprobe *)"
     ]
   }
 }

@@ -1,4 +1,10 @@
-"""IoU-based multi-object tracker for pothole instances across frames."""
+"""IoU-based multi-object trackers across frames.
+
+PotholeTracker — keeps masks + measurements per track, used for instance
+                  segmentations from the segmenter.
+BBoxTracker    — lighter version for plain detections (e.g. cracks). Matches
+                  same-class bboxes only, no measurements.
+"""
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -99,9 +105,17 @@ class PotholeTracker:
 
         return [int(t) for t in track_ids]
 
-    def finalize(self, min_observations: int = 2, min_valid_measurements: int = 1) -> list[dict]:
+    def finalize(
+        self,
+        min_observations: int = 2,
+        min_valid_measurements: int = 1,
+        min_avg_depth_cm: float = 0.0,
+        min_area_cm2: float = 0.0,
+    ) -> list[dict]:
         """Aggregate per-track measurements (median across observations).
-        Filters out tracks that appeared for too few frames (likely false positives).
+
+        Filters out tracks that appeared for too few frames (likely false positives)
+        or whose median measurement is below the plausibility floors.
         """
         out: list[dict] = []
         for tr in self.tracks:
@@ -116,6 +130,11 @@ class PotholeTracker:
             dmax = np.array([m.max_depth_cm for m in valid])
             vols = np.array([m.volume_cm3 for m in valid])
 
+            med_depth = float(np.median(davg))
+            med_area = float(np.median(areas))
+            if med_depth < min_avg_depth_cm or med_area < min_area_cm2:
+                continue
+
             out.append(
                 {
                     "track_id": tr.track_id,
@@ -123,11 +142,104 @@ class PotholeTracker:
                     "last_frame": tr.last_frame,
                     "observations": len(tr.observations),
                     "valid_measurements": len(valid),
-                    "area_cm2": float(np.median(areas)),
-                    "avg_depth_cm": float(np.median(davg)),
+                    "area_cm2": med_area,
+                    "avg_depth_cm": med_depth,
                     "max_depth_cm": float(np.median(dmax)),
                     "volume_cm3": float(np.median(vols)),
                     "confidence": float(np.median([o.confidence for o in tr.observations])),
+                }
+            )
+        return out
+
+
+# --------------------- BBoxTracker (cracks etc.) ---------------------
+
+
+@dataclass
+class _BBoxTrack:
+    track_id: int
+    class_name: str
+    first_frame: int
+    last_frame: int
+    last_bbox: tuple[int, int, int, int]
+    observations: int = 0
+    confidences: list[float] = field(default_factory=list)
+
+
+class BBoxTracker:
+    """Generic same-class bbox tracker. No masks, no measurements."""
+
+    def __init__(self, iou_threshold: float = 0.2, max_gap_frames: int = 15):
+        self.tracks: list[_BBoxTrack] = []
+        self._next_id = 1
+        self.iou_threshold = float(iou_threshold)
+        self.max_gap_frames = int(max_gap_frames)
+
+    def update(self, frame_idx: int, detections: list) -> list[int]:
+        """detections: iterable of objects with .class_name, .bbox, .confidence.
+        Returns list of track_ids in input order.
+        """
+        active = [t for t in self.tracks if frame_idx - t.last_frame <= self.max_gap_frames]
+
+        pairs: list[tuple[float, int, int]] = []
+        for di, det in enumerate(detections):
+            for ti, tr in enumerate(active):
+                if tr.class_name != det.class_name:
+                    continue
+                iou = _iou(det.bbox, tr.last_bbox)
+                if iou >= self.iou_threshold:
+                    pairs.append((iou, di, ti))
+        pairs.sort(reverse=True)
+
+        det_matched = [False] * len(detections)
+        track_matched = [False] * len(active)
+        track_ids: list[Optional[int]] = [None] * len(detections)
+
+        for iou, di, ti in pairs:
+            if det_matched[di] or track_matched[ti]:
+                continue
+            det = detections[di]
+            tr = active[ti]
+            tr.last_bbox = det.bbox
+            tr.last_frame = frame_idx
+            tr.observations += 1
+            tr.confidences.append(float(det.confidence))
+            track_ids[di] = tr.track_id
+            det_matched[di] = True
+            track_matched[ti] = True
+
+        for di, det in enumerate(detections):
+            if det_matched[di]:
+                continue
+            tid = self._next_id
+            self._next_id += 1
+            new_tr = _BBoxTrack(
+                track_id=tid,
+                class_name=det.class_name,
+                first_frame=frame_idx,
+                last_frame=frame_idx,
+                last_bbox=det.bbox,
+                observations=1,
+                confidences=[float(det.confidence)],
+            )
+            self.tracks.append(new_tr)
+            track_ids[di] = tid
+
+        return [int(t) for t in track_ids]
+
+    def finalize(self, min_observations: int = 3) -> list[dict]:
+        out: list[dict] = []
+        for tr in self.tracks:
+            if tr.observations < min_observations:
+                continue
+            out.append(
+                {
+                    "track_id": tr.track_id,
+                    "class_name": tr.class_name,
+                    "first_frame": tr.first_frame,
+                    "last_frame": tr.last_frame,
+                    "observations": tr.observations,
+                    "confidence": float(np.median(tr.confidences)) if tr.confidences else 0.0,
                 }
             )
         return out

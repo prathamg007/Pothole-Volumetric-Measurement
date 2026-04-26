@@ -85,8 +85,37 @@
 
     document.getElementById("btn-record").addEventListener("click", () => startRecording());
 
+    const fileInput = document.getElementById("file-input");
+    document.getElementById("btn-upload-existing").addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", (e) => handleFilePicked(e.target.files[0]));
+
     refreshHealth();
     refreshJobs();
+  }
+
+  // ------------- Upload existing file -------------
+  function handleFilePicked(file) {
+    if (!file) return;
+    state.captured = {
+      blob: file,
+      mimeType: file.type || "video/mp4",
+      sensors: {
+        captured_at_epoch_ms: Date.now(),
+        duration_ms: 0,    // filled in once <video> reports it
+        sample_count: 0,
+        samples: [],
+        source: "uploaded_file",
+      },
+      meta: {
+        ua: navigator.userAgent,
+        file_name: file.name,
+        file_size_bytes: file.size,
+        file_type: file.type,
+        source: "uploaded_file",
+      },
+    };
+    show("view-upload");
+    preparePreview();
   }
 
   // ------------- Recorder -------------
@@ -154,10 +183,21 @@
     const c = state.captured;
     if (!c) return;
     const v = document.getElementById("upload-preview");
+    const durEl = document.getElementById("upload-duration");
     v.src = URL.createObjectURL(c.blob);
-    document.getElementById("upload-duration").textContent = formatMs(c.sensors.duration_ms);
+    durEl.textContent = c.sensors.duration_ms > 0 ? formatMs(c.sensors.duration_ms) : "—";
+    // Probe duration from the <video> element once metadata is available
+    v.onloadedmetadata = () => {
+      if (isFinite(v.duration) && v.duration > 0) {
+        const ms = v.duration * 1000;
+        if (c.sensors.duration_ms === 0) c.sensors.duration_ms = ms;
+        durEl.textContent = formatMs(ms);
+      }
+    };
     document.getElementById("upload-size").textContent = `${(c.blob.size / 1024 / 1024).toFixed(1)} MB`;
-    document.getElementById("upload-imu").textContent = `${c.sensors.sample_count}`;
+    document.getElementById("upload-imu").textContent = c.sensors.sample_count > 0
+      ? `${c.sensors.sample_count}`
+      : "—";
     document.getElementById("upload-progress-card").classList.add("hidden");
     document.getElementById("upload-progress").value = 0;
     document.getElementById("upload-pct").textContent = "0%";

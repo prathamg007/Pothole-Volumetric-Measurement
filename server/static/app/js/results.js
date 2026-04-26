@@ -25,6 +25,24 @@
       document.getElementById("road-unevenness").textContent = rs && rs.unevenness
         ? rs.unevenness + fmtConfidence(rs.unevenness_confidence) : "—";
 
+      const imu = report.imu_check;
+      const imuCard = document.getElementById("card-imu");
+      if (imu && imu.sensors_present && imu.samples_count > 0) {
+        imuCard.classList.remove("hidden");
+        document.getElementById("imu-samples").textContent = `${imu.samples_count}`;
+        const pa = imu.plane_normal_agreement;
+        if (pa) {
+          document.getElementById("imu-agreement").textContent =
+            `${pa.percent_within_threshold}% within ${pa.threshold_deg}°`;
+          document.getElementById("imu-mean").textContent = `${pa.mean_angle_deg}°`;
+        } else {
+          document.getElementById("imu-agreement").textContent = "no plane fit";
+          document.getElementById("imu-mean").textContent = "—";
+        }
+      } else {
+        imuCard.classList.add("hidden");
+      }
+
       const s = report.summary || {};
       document.getElementById("sum-potholes").textContent = fmtNumber(s.num_potholes);
       document.getElementById("sum-area").textContent =

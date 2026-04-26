@@ -14,11 +14,12 @@ from app.physics.intrinsics import backproject, compute_K
 from app.physics.repair_advisor import RepairAdvisor
 from app.physics.severity import SeverityClassifier
 from app.physics.volumetric import measure_pothole
+from app.utils.imu import angle_between_deg, summarize as summarize_imu
 from app.utils.logger import get_logger
-from app.utils.video_io import make_writer, probe_video
+from app.utils.video_io import make_writer, normalize_input, probe_video, transcode_for_web
 from app.worker.annotator import annotate_frame
 from app.worker.models_registry import ModelRegistry
-from app.worker.tracker import PotholeTracker
+from app.worker.tracker import BBoxTracker, PotholeTracker
 
 log = get_logger("pipeline")
 
@@ -38,7 +39,20 @@ def process_video(
 
     The caller owns the ModelRegistry — models are loaded once and reused across jobs.
     """
-    info = probe_video(input_video)
+    # Normalize input first: re-encode to H.264 MP4 at a clean 30 fps so OpenCV
+    # gets reliable metadata. Without this, MediaRecorder WebM files claim
+    # 1000 fps and break tracker timestamps + plane-refit cadence.
+    output_video.parent.mkdir(parents=True, exist_ok=True)
+    normalized_input = output_video.parent / "input_normalized.mp4"
+    log.info(f"Normalizing input via ffmpeg ({input_video.name} -> input_normalized.mp4)...")
+    try:
+        normalize_input(input_video, normalized_input, target_fps=30.0)
+        active_input = normalized_input
+    except Exception as e:
+        log.warning(f"normalize_input failed: {e}; falling back to raw input")
+        active_input = input_video
+
+    info = probe_video(active_input)
     log.info(
         f"Video: {info.width}x{info.height} @ {info.fps:.1f} fps, "
         f"{info.frame_count} frames ({info.duration_s:.1f}s)"
@@ -60,11 +74,38 @@ def process_video(
     device_cfg = intr_cfg["devices"][device_key]
     K = compute_K((info.height, info.width), image_path=exif_reference_image, device_cfg=device_cfg)
 
-    tracker = PotholeTracker(iou_threshold=0.3, max_gap_frames=int(info.fps))
+    pot_track_cfg = cfg["pipeline"].get("pothole_tracking", {})
+    crk_track_cfg = cfg["pipeline"].get("crack_tracking", {})
+    tracker = PotholeTracker(
+        iou_threshold=pot_track_cfg.get("iou_threshold", 0.15),
+        max_gap_frames=pot_track_cfg.get("max_gap_frames", int(info.fps)),
+    )
+    crack_tracker = BBoxTracker(
+        iou_threshold=crk_track_cfg.get("iou_threshold", 0.15),
+        max_gap_frames=crk_track_cfg.get("max_gap_frames", int(info.fps)),
+    )
     sev = SeverityClassifier(cfg["severity"])
     advisor = RepairAdvisor(cfg["repair"])
 
-    cap = cv2.VideoCapture(str(input_video))
+    # IMU sanity check. Read sensors.json if it was uploaded alongside the video.
+    sensors_path = input_video.parent / "sensors.json"
+    imu_summary = summarize_imu(sensors_path)
+    imu_gravity = None
+    if imu_summary.gravity_camera is not None:
+        imu_gravity = np.asarray(imu_summary.gravity_camera, dtype=np.float32)
+        log.info(
+            f"IMU: {imu_summary.samples_count} samples, "
+            f"gravity_cam={[round(x, 3) for x in imu_summary.gravity_camera]}"
+        )
+    elif imu_summary.sensors_present:
+        log.info(f"IMU sensors.json present but no usable samples (source={imu_summary.source})")
+    else:
+        log.info("IMU sensors.json not present; measurements rely on depth-only plane fit")
+
+    imu_agreement_threshold_deg = 15.0
+    plane_imu_angles: list[float] = []
+
+    cap = cv2.VideoCapture(str(active_input))
     writer = make_writer(output_video, info.fps, (info.width, info.height))
 
     # Cached per-stride state
@@ -73,7 +114,7 @@ def process_video(
     plane: Optional[Plane] = None
     plane_refit_every = max(int(info.fps), 5)  # refit ~once per second
 
-    crack_counts: dict[str, int] = defaultdict(int)
+    raw_crack_detections: dict[str, int] = defaultdict(int)
     # Material accumulator: each entry is the per-frame predict() dict
     material_predictions: list[dict] = []
     frame_idx = 0
@@ -111,6 +152,12 @@ def process_video(
                     )
                     if new_plane is not None:
                         plane = new_plane
+                        # IMU sanity check: plane normal points from ground toward camera,
+                        # so the angle vs gravity (which points down) should be ~180°.
+                        # We compare plane_normal to (-gravity) so the expected angle is ~0°.
+                        if imu_gravity is not None:
+                            angle = angle_between_deg(plane.normal, -imu_gravity)
+                            plane_imu_angles.append(angle)
 
                 for det in pothole_dets:
                     m = measure_pothole(det.mask, points, plane) if plane is not None else None
@@ -138,20 +185,23 @@ def process_video(
                 {"class_name": c.class_name, "confidence": c.confidence, "bbox": c.bbox}
                 for c in crack_dets
             ]
+            crack_tracker.update(frame_idx, crack_dets)
             for c in crack_dets:
-                crack_counts[c.class_name] += 1
+                raw_crack_detections[c.class_name] += 1
 
-            # Material classifier — sparser cadence
+            # Material classifier — sparser cadence. Crop to road region first
+            # so the classifier sees mostly road surface, not sky/vehicles.
             if material_clf is not None and frame_idx % material_every == 0:
                 try:
-                    mat_pred = material_clf.predict(frame_rgb)
+                    road_crop = _crop_road_region(frame_rgb)
+                    mat_pred = material_clf.predict(road_crop)
                     material_predictions.append(mat_pred)
                 except Exception as e:
                     log.warning(f"material classifier failed on frame {frame_idx}: {e}")
 
             inference_time += time.time() - t_inf
 
-        running = {"potholes": len(tracker.tracks), "cracks": sum(crack_counts.values())}
+        running = {"potholes": len(tracker.tracks), "cracks": sum(raw_crack_detections.values())}
         annotated = annotate_frame(
             frame_bgr,
             potholes=last_potholes_annot,
@@ -174,12 +224,62 @@ def process_video(
     cap.release()
     writer.release()
 
+    # Transcode the OpenCV-produced mp4v file to browser-friendly H.264
+    # in place. Without this, Chrome on Android refuses to play it.
+    log.info("Transcoding output to web-friendly H.264...")
+    try:
+        transcode_for_web(output_video)
+    except Exception as e:
+        log.warning(f"transcode_for_web failed: {e}; keeping mp4v output (may not play in browser)")
+
+    # Cleanup normalized input
+    if normalized_input.exists() and active_input == normalized_input:
+        try:
+            normalized_input.unlink()
+        except Exception:
+            pass
+
+    # Aggregate IMU plane-agreement stats (if IMU was present)
+    imu_check = {
+        "sensors_present": imu_summary.sensors_present,
+        "samples_count": imu_summary.samples_count,
+        "source": imu_summary.source,
+        "gravity_camera_frame": imu_summary.gravity_camera,
+        "gravity_magnitude_ms2": (
+            round(imu_summary.gravity_magnitude_ms2, 3)
+            if imu_summary.gravity_magnitude_ms2 is not None else None
+        ),
+        "plane_normal_agreement": None,
+    }
+    if plane_imu_angles:
+        angles = np.asarray(plane_imu_angles, dtype=np.float32)
+        agreeing = float((angles < imu_agreement_threshold_deg).mean() * 100)
+        imu_check["plane_normal_agreement"] = {
+            "n_refits": len(plane_imu_angles),
+            "threshold_deg": imu_agreement_threshold_deg,
+            "mean_angle_deg": round(float(angles.mean()), 2),
+            "max_angle_deg": round(float(angles.max()), 2),
+            "percent_within_threshold": round(agreeing, 1),
+        }
+
     # Aggregate material classifier predictions across frames
     road_surface = _aggregate_road_surface(material_predictions)
     repair_surface_type = _map_to_repair_surface(road_surface.get("material") if road_surface else None)
 
     # Aggregate per-track
-    tracks_summary = tracker.finalize(min_observations=2, min_valid_measurements=1)
+    tracks_summary = tracker.finalize(
+        min_observations=int(pot_track_cfg.get("min_observations", 5)),
+        min_valid_measurements=1,
+        min_avg_depth_cm=float(pot_track_cfg.get("min_avg_depth_cm", 0.5)),
+        min_area_cm2=float(pot_track_cfg.get("min_area_cm2", 50)),
+    )
+    crack_tracks = crack_tracker.finalize(
+        min_observations=int(crk_track_cfg.get("min_observations", 3)),
+    )
+    crack_counts_unique: dict[str, int] = defaultdict(int)
+    for ct in crack_tracks:
+        crack_counts_unique[ct["class_name"]] += 1
+
     potholes_report: list[dict] = []
     totals = {"area_cm2": 0.0, "volume_cm3": 0.0, "material_kg": 0.0, "cost": 0.0}
 
@@ -234,8 +334,10 @@ def process_video(
             "inference_s": round(inference_time, 2),
             "frame_stride": stride,
         },
-        "cracks": dict(crack_counts),
+        "cracks": dict(crack_counts_unique),
+        "crack_detections_raw": dict(raw_crack_detections),
         "road_surface": road_surface,
+        "imu_check": imu_check,
         "potholes": potholes_report,
         "summary": {
             "num_potholes": len(potholes_report),
@@ -244,7 +346,7 @@ def process_video(
             "total_material_kg": round(totals["material_kg"], 2),
             "total_cost": round(totals["cost"], 2),
             "currency": cfg["repair"]["currency"],
-            "total_cracks_detected": sum(crack_counts.values()),
+            "total_cracks_detected": sum(crack_counts_unique.values()),
             "road_material": road_surface.get("material") if road_surface else None,
             "road_unevenness": road_surface.get("unevenness") if road_surface else None,
         },
@@ -289,3 +391,19 @@ def _map_to_repair_surface(predicted_material: str | None) -> str:
     if predicted_material == "concrete":
         return "concrete"
     return "asphalt"
+
+
+def _crop_road_region(frame_rgb: np.ndarray) -> np.ndarray:
+    """Crop the frame to the area most likely to contain road surface.
+
+    For phone-shot road videos held naturally (camera tilted slightly down),
+    the road occupies roughly the bottom 60% of the frame, middle 80% width.
+    Cropping to this region before material classification dramatically
+    improves accuracy compared to feeding the whole frame, which dilutes
+    the signal with sky / vehicles / scenery.
+    """
+    h, w = frame_rgb.shape[:2]
+    y0 = int(h * 0.40)
+    x0 = int(w * 0.10)
+    x1 = int(w * 0.90)
+    return frame_rgb[y0:, x0:x1]

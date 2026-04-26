@@ -1,0 +1,3 @@
+- [UGP_amarb project scope](project_scope.md) — user granted broad edit authority across both repos; goal: mobile app → server → processed video with detection/cm-measurements/repair-recs
+- [Codebase facts](codebase_facts.md) — model classes, weights locations, key blockers verified 2026-04-21
+- [Technical decisions](project_decisions.md) — locked-in architecture: Flutter+FastAPI, metric depth, IMU, no reference object, ±15% accuracy target
