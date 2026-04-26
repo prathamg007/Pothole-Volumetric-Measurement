@@ -56,8 +56,8 @@ The server is FastAPI + SQLite, the client is a Progressive Web App that works o
 ### 1. Clone and set up the environment
 
 ```bash
-git clone https://github.com/<your-username>/pothole-volumetric.git
-cd pothole-volumetric
+git clone https://github.com/prathamg007/Pothole-Volumetric-Measurement.git
+cd Pothole-Volumetric-Measurement
 
 # Create a virtualenv (or use conda, whatever you prefer)
 python -m venv venv
@@ -81,7 +81,7 @@ The `.pt` weight files are too large for git. You need three files in `server/we
 | `crack_typology.pt` | ~85 MB | YOLOv8-det for crack classification |
 | `material_classifier.pt` | ~5 MB | MobileNetV3-Small dual-head, trained on the RSCD dataset |
 
-Download them from the [Releases](https://github.com/<your-username>/pothole-volumetric/releases) page and place them in `server/weights/`. Or if you have access to the original training artifacts, copy them from there.
+Download them from the [Releases](https://github.com/prathamg007/Pothole-Volumetric-Measurement/releases) page and place them in `server/weights/`. Or if you have access to the original training artifacts, copy them from there.
 
 You can verify the weights loaded correctly:
 
